@@ -1,0 +1,15 @@
+# Игнорировать системные файлы macOS
+.DS_Store
+
+*/__pycache__
+__pycache__
+dist
+
+# Игнорировать логи
+*.log
+*.cast
+
+.venv
+dist
+demo.cast
+.ruff_cache

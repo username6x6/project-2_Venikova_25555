@@ -1,0 +1,24 @@
+{
+    "tables": {
+        "users": {
+            "structure": [
+                {
+                    "name": "ID",
+                    "type": "int"
+                },
+                {
+                    "name": "name",
+                    "type": "str"
+                },
+                {
+                    "name": "age",
+                    "type": "int"
+                },
+                {
+                    "name": "is_active",
+                    "type": "bool"
+                }
+            ]
+        }
+    }
+}
