@@ -3,7 +3,7 @@
 
 */__pycache__
 __pycache__
-dist
+dist/
 
 # Игнорировать логи
 *.log
@@ -13,3 +13,4 @@ dist
 dist
 demo.cast
 .ruff_cache
+db_meta.json

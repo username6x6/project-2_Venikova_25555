@@ -1,7 +1,8 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from prettytable import PrettyTable
 
+from src.decorators import create_cacher
 from src.primitive_db.core import (
     _get_schema,
     create_table,
@@ -34,6 +35,9 @@ def _print_table(schema: List[Dict[str, str]], rows: List[Dict[str, Any]]) -> No
 
 def run():
     metadata: Dict[str, Any] = load_metadata(META_PATH)
+    # Кэшер для SELECT
+    select_cache = create_cacher()
+
     print("База данных запущена. Введите команду. help для справки.")
 
     while True:
@@ -46,103 +50,116 @@ def run():
         if not user_input:
             continue
 
+        # Парсинг команд
         try:
             cmd = parse_command(user_input)
         except ValueError as ve:
             print(f"Ошибка: {ve}")
             continue
 
+        # Выполнение команд
         try:
-            if cmd["cmd"] == "help":
-                print(help_text())
+            ctype = cmd["cmd"]
+            match ctype:
+                case "help":
+                    print(help_text())
 
-            elif cmd["cmd"] == "exit":
-                break
+                case "exit":
+                    break
 
-            elif cmd["cmd"] == "list_tables":
-                tabs = list_tables(metadata)
-                print("tables - " + (", ".join(tabs) if tabs else ""))
+                case "list_tables":
+                    tabs = list_tables(metadata)
+                    print("tables - " + (", ".join(tabs) if tabs else ""))
 
-            elif cmd["cmd"] == "create_table":
-                table_name = cmd["table"]
-                columns = cmd["columns"]
-                try:
+                case "create_table":
+                    table_name = cmd["table"]
+                    columns = cmd["columns"]
                     metadata = create_table(metadata, table_name, columns)
                     save_metadata(META_PATH, metadata)
-                except ValueError as ve:
-                    print(f"Ошибка: {ve}")
 
-            elif cmd["cmd"] == "drop_table":
-                table_name = cmd["table"]
-                metadata = drop_table(metadata, table_name)
-                save_metadata(META_PATH, metadata)
+                case "drop_table":
+                    table_name = cmd["table"]
+                    metadata = drop_table(metadata, table_name)
+                    save_metadata(META_PATH, metadata)
+                    # Сброс кэша на всякий случай
+                    select_cache = create_cacher()
 
-            elif cmd["cmd"] == "insert":
-                table = cmd["table"]
-                values = cmd["values"]  # уже приведены к Python типам парсером
-                rows = load_table_data(table)
-                try:
+                case "insert":
+                    table = cmd["table"]
+                    values = cmd["values"]  # уже приведены к Python типам парсером
+                    rows = load_table_data(table)
                     rows = core_insert(metadata, table, rows, values)
                     save_table_data(table, rows)
-                    new_id = rows[-1]["ID"]
-                    print(f'Запись с ID={new_id} успешно добавлена '
-                          'в таблицу \"{table}\".')
-                except ValueError as ve:
-                    print(f"Ошибка: {ve}")
+                    # Сброс кэша после изменения данных
+                    select_cache = create_cacher()
+                    if rows:
+                        new_id = rows[-1]["ID"]
+                        print(f'Запись с ID={new_id} успешно добавлена '
+                              'в таблицу "{table}".')
 
-            elif cmd["cmd"] == "select":
-                table = cmd["table"]
-                where = cmd.get("where")
-                rows = load_table_data(table)
-                # Схема нужна для порядка столбцов
-                schema = _get_schema(metadata, table)
-                result = core_select(rows, where)
-                if result:
-                    _print_table(schema, result)
-                else:
-                    print("Нет данных по заданному запросу.")
+                case "select":
+                    table = cmd["table"]
+                    where = cmd.get("where")
+                    rows = load_table_data(table)
+                    schema = _get_schema(metadata, table)
+                    # Ключ кэша: (table, where-как-кортеж)
+                    where_key: Optional[Tuple[Tuple[str, Any], ...]] = None
+                    if where:
+                        where_key = tuple(sorted(where.items()))
+                    key = (table, where_key)
 
-            elif cmd["cmd"] == "update":
-                table = cmd["table"]
-                set_clause = cmd["set"]
-                where = cmd["where"]
-                rows = load_table_data(table)
-                try:
+                    def _value():
+                        return core_select(rows, where)
+
+                    result = select_cache(key, _value)
+                    if result:
+                        _print_table(schema, result)
+                    else:
+                        print("Нет данных по заданному запросу.")
+
+                case "update":
+                    table = cmd["table"]
+                    set_clause = cmd["set"]
+                    where = cmd["where"]
+                    rows = load_table_data(table)
                     changed = core_update(metadata, table, rows, set_clause, where)
                     save_table_data(table, rows)
+                    # Сброс кэша после изменения данных
+                    select_cache = create_cacher()
                     if changed == 1 and "ID" in where:
-                        print(f'Запись с ID={where["ID"]} в таблице \"{table}\" '
+                        print(f'Запись с ID={where["ID"]} в таблице "{table}" '
                               'успешно обновлена.')
                     else:
                         print(f"Обновлено записей: {changed}.")
-                except ValueError as ve:
-                    print(f"Ошибка: {ve}")
 
-            elif cmd["cmd"] == "delete":
-                table = cmd["table"]
-                where = cmd["where"]
-                rows = load_table_data(table)
-                deleted = core_delete(rows, where)
-                save_table_data(table, rows)
-                if deleted == 1 and "ID" in where:
-                    print(f'Запись с ID={where["ID"]} успешно удалена '
-                          'из таблицы \"{table}\".')
-                else:
-                    print(f"Удалено записей: {deleted}.")
+                case "delete":
+                    table = cmd["table"]
+                    where = cmd["where"]
+                    rows = load_table_data(table)
+                    deleted = core_delete(rows, where)
+                    save_table_data(table, rows)
+                    # Сброс кэша после изменения данных
+                    select_cache = create_cacher()
+                    if deleted == 1 and "ID" in where:
+                        print(f'Запись с ID={where["ID"]} успешно удалена '
+                              'из таблицы "{table}".')
+                    else:
+                        print(f"Удалено записей: {deleted}.")
 
-            elif cmd["cmd"] == "info":
-                table = cmd["table"]
-                schema = _get_schema(metadata, table)
-                rows = load_table_data(table)
-                cols = ", ".join([f'{c["name"]}:{c["type"]}' for c in schema])
-                print(f"Таблица: {table}")
-                print(f"Столбцы: {cols}")
-                print(f"Количество записей: {len(rows)}")
+                case "info":
+                    table = cmd["table"]
+                    schema = _get_schema(metadata, table)
+                    rows = load_table_data(table)
+                    cols = ", ".join(f'{c["name"]}:{c["type"]}' for c in schema)
+                    print(f"Таблица: {table}")
+                    print(f"Столбцы: {cols}")
+                    print(f"Количество записей: {len(rows)}")
 
-            else:
-                print("Неизвестная команда. help для справки.")
+                case _:
+                    print("Неизвестная команда. help для справки.")
 
         except ValueError as ve:
+            # На случай ошибок парсинга/валидации вне ядра
             print(f"Ошибка: {ve}")
 
     print("Выход из программы.")

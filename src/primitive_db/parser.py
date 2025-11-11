@@ -20,7 +20,7 @@ def parse_scalar(token: str) -> Any:
     # int
     if re.fullmatch(r"[+-]?\d+", t):
         return int(t)
-    # string (требуем кавычки для строк, как в задании)
+    # string (требуем кавычки для строк)
     if (len(t) >= 2) and (t[0] in ("'", '"') and t[-1] == t[0]):
         return _unquote(t)
     # иначе — ошибка
@@ -64,7 +64,7 @@ def parse_where(where_segment: Optional[str]) -> Optional[Dict[str, Any]]:
     if not where_segment:
         return None
     # поддерживаем один предикат: <col> = <value>
-    m = re.fullmatch(r"\s*(\w+)\s*=\s*(.+?)\s*\s*", where_segment)
+    m = re.fullmatch(r"\s*(\w+)\s*=\s*(.+?)\s*$", where_segment)
     if not m:
         raise ValueError("Ожидалось условие вида: <колонка> = <значение>")
     col = m.group(1)
@@ -77,7 +77,7 @@ def parse_set(set_segment: str) -> Dict[str, Any]:
     assigns = _split_csv_outside_quotes(set_segment)
     res: Dict[str, Any] = {}
     for a in assigns:
-        m = re.fullmatch(r"\s*(\w+)\s*=\s*(.+?)\s*", a)
+        m = re.fullmatch(r"\s*(\w+)\s*=\s*(.+?)\s*$", a)
         if not m:
             raise ValueError(f"Некорректное присваивание в set: {a}")
         col = m.group(1)
@@ -92,40 +92,41 @@ def parse_command(line: str) -> Dict[str, Any]:
     low = s.lower()
 
     # insert into <table> values (...)
-    m = re.fullmatch(r"\s*insert\s+into\s+(\w+)\s+values\s*(\(.+\))\s*", 
-                     s, flags=re.IGNORECASE)
+    m = re.fullmatch(r"\s*insert\s+into\s+(\w+)\s+values\s*(\(.+\))\s*$", s, 
+                     flags=re.IGNORECASE)
     if m:
         return {"cmd": "insert", "table": m.group(1), 
                 "values": parse_values_list(m.group(2))}
 
     # select from <table> [where ...]
-    m = re.fullmatch(r"\s*select\s+from\s+(\w+)\s*(?:where\s+(.+))?\s*", 
-                     s, flags=re.IGNORECASE)
+    m = re.fullmatch(r"\s*select\s+from\s+(\w+)(?:\s+where\s+(.+))?\s*$", s, 
+                     flags=re.IGNORECASE)
     if m:
         table = m.group(1)
         where = parse_where(m.group(2)) if m.group(2) else None
         return {"cmd": "select", "table": table, "where": where}
 
     # update <table> set ... where ...
-    m = re.fullmatch(r"\s*update\s+(\w+)\s+set\s+(.+?)\s+where\s+(.+)\s*", 
-                     s, flags=re.IGNORECASE)
+    m = re.fullmatch(r"\s*update\s+(\w+)\s+set\s+(.+?)\s+where\s+(.+)\s*$", s, 
+                     flags=re.IGNORECASE)
     if m:
         return {"cmd": "update", "table": m.group(1), "set": parse_set(m.group(2)), 
                 "where": parse_where(m.group(3))}
 
     # delete from <table> where ...
-    m = re.fullmatch(r"\s*delete\s+from\s+(\w+)\s+where\s+(.+)\s*", 
-                     s, flags=re.IGNORECASE)
+    m = re.fullmatch(r"\s*delete\s+from\s+(\w+)\s+where\s+(.+)\s*$", s, 
+                     flags=re.IGNORECASE)
     if m:
-        return {"cmd": "delete", "table": m.group(1), "where": parse_where(m.group(2))}
+        return {"cmd": "delete", "table": m.group(1), 
+                "where": parse_where(m.group(2))}
 
     # info <table>
-    m = re.fullmatch(r"\s*info\s+(\w+)\s*", s, flags=re.IGNORECASE)
+    m = re.fullmatch(r"\s*info\s+(\w+)\s*$", s, flags=re.IGNORECASE)
     if m:
         return {"cmd": "info", "table": m.group(1)}
 
     # list_tables
-    if re.fullmatch(r"\s*list_tables\s*", s, flags=re.IGNORECASE):
+    if re.fullmatch(r"\s*list_tables\s*$", s, flags=re.IGNORECASE):
         return {"cmd": "list_tables"}
 
     # create_table <name> <col:type> ...
@@ -143,9 +144,9 @@ def parse_command(line: str) -> Dict[str, Any]:
         return {"cmd": "drop_table", "table": parts[1]}
 
     # help / exit
-    if re.fullmatch(r"\s*help\s*", s, flags=re.IGNORECASE):
+    if re.fullmatch(r"\s*help\s*$", s, flags=re.IGNORECASE):
         return {"cmd": "help"}
-    if re.fullmatch(r"\s*exit\s*", s, flags=re.IGNORECASE):
+    if re.fullmatch(r"\s*exit\s*$", s, flags=re.IGNORECASE):
         return {"cmd": "exit"}
 
     raise ValueError("Некорректная функция или формат команды")

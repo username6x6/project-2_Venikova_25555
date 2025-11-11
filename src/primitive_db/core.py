@@ -1,6 +1,9 @@
 from typing import Any, Dict, List, Optional, Tuple
 
+from src.decorators import confirm_action, handle_db_errors, log_time
+
 ALLOWED_TYPES = {"int": int, "str": str, "bool": bool}
+
 
 def _normalize_columns(columns: List[str]) -> List[Tuple[str, str]]:
     """Преобразовать список строк вида столбец:тип в пары (имя, тип)."""
@@ -23,6 +26,7 @@ def _validate_types(columns: List[Tuple[str, str]]) -> None:
             raise ValueError(f"Некорректный тип: {typ}")
 
 
+@handle_db_errors
 def create_table(metadata: Dict[str, Any], table_name: str, 
                  columns: List[str]) -> Dict[str, Any]:
     if "tables" not in metadata:
@@ -35,23 +39,20 @@ def create_table(metadata: Dict[str, Any], table_name: str,
     parsed = _normalize_columns(columns)
     _validate_types(parsed)
 
-    # добавляем ID:int в начало
+    # Добавляем ID:int в начало
     parsed_with_id = [("ID", "int")] + parsed
 
-    # сохраняем структуру как список словарей
+    # Сохраняем структуру как список словарей
     table_structure = [{"name": n, "type": t} for n, t in parsed_with_id]
+    metadata["tables"][table_name] = {"structure": table_structure}
 
-    metadata["tables"][table_name] = {
-        "structure": table_structure
-    }
-
-    print(
-        f'Таблица "{table_name}" успешно создана со столбцами: ' +
-        ", ".join([f'{n}:{t}' for n, t in parsed_with_id])
-    )
+    cols_str = ", ".join(f"{n}:{t}" for n, t in parsed_with_id)
+    print(f'Таблица "{table_name}" успешно создана со столбцами: {cols_str}')
     return metadata
 
 
+@handle_db_errors
+@confirm_action('удаление таблицы')
 def drop_table(metadata: Dict[str, Any], table_name: str) -> Dict[str, Any]:
     if "tables" not in metadata or table_name not in metadata["tables"]:
         print(f'Ошибка: Таблица "{table_name}" не существует.')
@@ -62,12 +63,14 @@ def drop_table(metadata: Dict[str, Any], table_name: str) -> Dict[str, Any]:
     return metadata
 
 
+@handle_db_errors
 def list_tables(metadata: Dict[str, Any]) -> List[str]:
     if "tables" not in metadata:
         return []
     return list(metadata["tables"].keys())
 
 
+@handle_db_errors
 def help_text() -> str:
     return (
         "Функции:\n"
@@ -84,6 +87,7 @@ def help_text() -> str:
     )
 
 
+@handle_db_errors
 def _get_schema(metadata: Dict[str, Any], table_name: str) -> List[Dict[str, str]]:
     if "tables" not in metadata or table_name not in metadata["tables"]:
         raise ValueError(f'Таблица "{table_name}" не существует')
@@ -109,6 +113,8 @@ def _next_id(rows: List[Dict[str, Any]]) -> int:
     return max(int(r.get("ID", 0)) for r in rows) + 1
 
 
+@handle_db_errors
+@log_time
 def insert(metadata: Dict[str, Any], table_name: str, rows: List[Dict[str, Any]], 
            values: List[Any]) -> List[Dict[str, Any]]:
     
@@ -140,6 +146,8 @@ def _match_where(row: Dict[str, Any], where: Optional[Dict[str, Any]]) -> bool:
     return True
 
 
+@handle_db_errors
+@log_time
 def select(rows: List[Dict[str, Any]], 
            where: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     if where is None:
@@ -147,6 +155,7 @@ def select(rows: List[Dict[str, Any]],
     return [r for r in rows if _match_where(r, where)]
 
 
+@handle_db_errors
 def update(metadata: Dict[str, Any], table_name: str,
            rows: List[Dict[str, Any]],
            set_clause: Dict[str, Any],
@@ -169,6 +178,8 @@ def update(metadata: Dict[str, Any], table_name: str,
     return count
 
 
+@handle_db_errors
+@confirm_action('удаление записей')
 def delete(rows: List[Dict[str, Any]], where: Dict[str, Any]) -> int:
     before = len(rows)
     remaining = [r for r in rows if not _match_where(r, where)]
