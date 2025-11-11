@@ -14,3 +14,4 @@ dist
 demo.cast
 .ruff_cache
 db_meta.json
+data

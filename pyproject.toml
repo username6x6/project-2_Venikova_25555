@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "project-2-venikova-25555"
 version = "0.1.0"
-description = ""
-authors = ["Your Name <you@example.com>"]
+description = "Минималистичная файловая СУБД с управлением схемой, CRUD-операциями, хранением данных в JSON и консольным выводом через PrettyTable."
+authors = ["Maria Venikova"]
 readme = "README.md"
 packages = [
     { include = "src" },
