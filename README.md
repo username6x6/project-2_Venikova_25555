@@ -105,3 +105,5 @@ user@pc-name:~/Documents/primitive_db$ make project
 ## Известные ограничения
 - Нет сложных условий (AND/OR), только одно равенство в where.
 - Нет индексов и транзакций; хранение — в JSON без блокировок.
+
+## Ссылка на запись: https://asciinema.org/a/4RRyy4lfLI0EBuLFQwdAPFpba
